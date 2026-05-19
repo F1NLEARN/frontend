@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import Header from '../components/Header'
 import { simulationApi } from '../api/simulation'
 import { seasonApi } from '../api/season'
-import type { InvestmentAccountResponse, HoldingResponse, PortfolioAnalysisResponse } from '../types/simulation'
+import type { InvestmentAccountResponse, HoldingResponse, PortfolioAnalysisResponse, FavoriteStockResponse } from '../types/simulation'
 import type { SeasonResponse } from '../types/season'
 
 function fmt(n: number) {
@@ -19,25 +19,36 @@ function ProfitBadge({ value }: { value: number }) {
   )
 }
 
+interface TradeModal {
+  mode: 'buy' | 'sell'
+  stockCode: string
+  stockName: string
+  currentPrice: number
+}
+
 export default function SimulationPage() {
   const navigate = useNavigate()
   const [season, setSeason] = useState<SeasonResponse | null>(null)
   const [account, setAccount] = useState<InvestmentAccountResponse | null>(null)
   const [holdings, setHoldings] = useState<HoldingResponse[]>([])
+  const [favorites, setFavorites] = useState<FavoriteStockResponse[]>([])
   const [analysis, setAnalysis] = useState<PortfolioAnalysisResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [error, setError] = useState('')
+  const [modal, setModal] = useState<TradeModal | null>(null)
+  const [qty, setQty] = useState('')
+  const [tradeLoading, setTradeLoading] = useState(false)
+  const [tradeMsg, setTradeMsg] = useState('')
 
   useEffect(() => {
     const load = async () => {
+      // 계좌·보유종목 (필수)
       try {
-        const [seasonRes, accountRes, holdingsRes] = await Promise.all([
-          seasonApi.getCurrentSeason(),
+        const [accountRes, holdingsRes] = await Promise.all([
           simulationApi.getAccount(),
           simulationApi.getHoldings(),
         ])
-        setSeason(seasonRes.data.data)
         setAccount(accountRes.data.data)
         setHoldings(holdingsRes.data.data)
       } catch (e: unknown) {
@@ -50,9 +61,83 @@ export default function SimulationPage() {
       } finally {
         setLoading(false)
       }
+
+      // 시즌 정보 (없어도 무방)
+      try {
+        const seasonRes = await seasonApi.getCurrentSeason()
+        setSeason(seasonRes.data.data)
+      } catch {
+        // 진행 중인 시즌이 없으면 배너 미표시
+      }
+
+      // 관심 종목
+      try {
+        const favRes = await simulationApi.getFavorites()
+        setFavorites(favRes.data.data)
+      } catch {
+        // ignore
+      }
+
+      // 기존 포트폴리오 분석 복원 (없으면 무시)
+      try {
+        const analysisRes = await simulationApi.getPortfolioAnalysis()
+        if (analysisRes.data.data) setAnalysis(analysisRes.data.data)
+      } catch {
+        // 분석 이력 없으면 무시
+      }
     }
     load()
   }, [])
+
+  const openModal = (mode: 'buy' | 'sell', h: HoldingResponse) => {
+    setModal({ mode, stockCode: h.stockCode, stockName: h.stockName, currentPrice: h.currentPrice })
+    setQty('')
+    setTradeMsg('')
+  }
+
+  const openModalFromFav = (mode: 'buy' | 'sell', f: FavoriteStockResponse) => {
+    setModal({ mode, stockCode: f.symbol, stockName: f.stockName, currentPrice: 0 })
+    setQty('')
+    setTradeMsg('')
+  }
+
+  const handleTrade = async () => {
+    if (!modal || !qty || Number(qty) <= 0) return
+    setTradeLoading(true)
+    setTradeMsg('')
+    try {
+      if (modal.mode === 'buy') {
+        await simulationApi.buyStock({ stockCode: modal.stockCode, quantity: Number(qty) })
+        setTradeMsg(`✅ ${modal.stockName} ${qty}주 매수 완료!`)
+      } else {
+        await simulationApi.sellStock({ stockCode: modal.stockCode, quantity: Number(qty) })
+        setTradeMsg(`✅ ${modal.stockName} ${qty}주 매도 완료!`)
+      }
+      setTimeout(() => {
+        setModal(null)
+        simulationApi.getAccount().then(r => setAccount(r.data.data)).catch(() => {})
+        simulationApi.getHoldings().then(r => setHoldings(r.data.data)).catch(() => {})
+      }, 1500)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setTradeMsg(`❌ ${msg ?? '거래에 실패했습니다.'}`)
+    } finally {
+      setTradeLoading(false)
+    }
+  }
+
+  const removeFavorite = async (symbol: string) => {
+    try {
+      await simulationApi.removeFavorite(symbol)
+      setFavorites(prev => prev.filter(f => f.symbol !== symbol))
+    } catch {
+      // ignore
+    }
+  }
+
+  const totalAmount = modal && qty && modal.currentPrice > 0
+    ? modal.currentPrice * Number(qty)
+    : null
 
   const handleRefreshAnalysis = async () => {
     setAnalysisLoading(true)
@@ -189,14 +274,97 @@ export default function SimulationPage() {
           ) : (
             <div className="space-y-3">
               {holdings.map((h) => (
-                <div key={h.holdingId} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{h.stockName}</p>
-                    <p className="text-xs text-slate-500">{h.stockCode} · {h.quantity}주</p>
+                <div key={h.holdingId} className="rounded-xl bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{h.stockName}</p>
+                      <p className="text-xs text-slate-500">{h.stockCode} · {h.quantity}주</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-slate-800">₩{fmt(h.currentEvaluationAmount)}</p>
+                      <ProfitBadge value={h.profitRate} />
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-slate-800">₩{fmt(h.currentEvaluationAmount)}</p>
-                    <ProfitBadge value={h.profitRate} />
+                  <div className="mt-2.5 flex gap-2">
+                    <button
+                      onClick={() => openModal('buy', h)}
+                      className="flex-1 rounded-lg bg-brand-gradient py-1.5 text-xs font-bold text-white hover:opacity-90"
+                    >
+                      + 매수
+                    </button>
+                    <button
+                      onClick={() => openModal('sell', h)}
+                      className="flex-1 rounded-lg border border-fin-red bg-fin-red-light py-1.5 text-xs font-bold text-fin-red hover:bg-red-100"
+                    >
+                      - 매도
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 관심 종목 */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-800">관심 종목</h3>
+            <Link to="/simulation/stocks" className="text-xs font-semibold text-brand-600 hover:underline">
+              종목 추가 →
+            </Link>
+          </div>
+          {favorites.length === 0 ? (
+            <div className="py-6 text-center">
+              <span className="text-2xl">⭐</span>
+              <p className="mt-2 text-sm text-slate-400">관심 종목이 없습니다</p>
+              <Link
+                to="/simulation/stocks"
+                className="mt-2 inline-block text-xs font-semibold text-brand-600 hover:underline"
+              >
+                종목 탐색하기 →
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {favorites.map((f) => (
+                <div key={f.favoriteStockId} className="rounded-xl bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-lg px-2 py-0.5 text-xs font-bold ${
+                          f.assetType === 'ETF'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-brand-100 text-brand-700'
+                        }`}
+                      >
+                        {f.assetType}
+                      </span>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{f.stockName}</p>
+                        <p className="text-xs text-slate-500">{f.symbol}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeFavorite(f.symbol)}
+                      className="ml-2 text-slate-300 hover:text-red-400 transition"
+                      title="관심 해제"
+                    >
+                      ★
+                    </button>
+                  </div>
+                  <div className="mt-2.5 flex gap-2">
+                    <button
+                      onClick={() => openModalFromFav('buy', f)}
+                      className="flex-1 rounded-lg bg-brand-gradient py-1.5 text-xs font-bold text-white hover:opacity-90"
+                    >
+                      + 매수
+                    </button>
+                    <button
+                      onClick={() => openModalFromFav('sell', f)}
+                      className="flex-1 rounded-lg border border-fin-red bg-fin-red-light py-1.5 text-xs font-bold text-fin-red hover:bg-red-100"
+                    >
+                      - 매도
+                    </button>
                   </div>
                 </div>
               ))}
@@ -280,6 +448,73 @@ export default function SimulationPage() {
           )}
         </div>
       </main>
+
+      {/* 매수/매도 모달 */}
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-sm rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-800">
+                {modal.mode === 'buy' ? '📈 매수' : '📉 매도'}
+              </h3>
+              <button onClick={() => setModal(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div className="mb-4 rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-sm font-bold text-slate-800">{modal.stockName}</p>
+              <p className="text-xs text-slate-500">{modal.stockCode}</p>
+              {modal.currentPrice > 0 && (
+                <p className="mt-1 text-base font-black text-slate-800">₩{fmt(modal.currentPrice)}</p>
+              )}
+            </div>
+
+            <div className="mb-3">
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">수량</label>
+              <input
+                type="number"
+                min="1"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                placeholder="주수 입력"
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+              />
+            </div>
+
+            {totalAmount !== null && qty && Number(qty) > 0 && (
+              <div className="mb-4 rounded-xl bg-brand-50 border border-brand-100 px-4 py-2.5">
+                <p className="text-xs text-slate-500">예상 {modal.mode === 'buy' ? '매수' : '매도'}금액</p>
+                <p className="text-lg font-black text-brand-700">₩{fmt(totalAmount)}</p>
+              </div>
+            )}
+
+            {tradeMsg && (
+              <div className={`mb-3 rounded-xl px-4 py-2.5 text-sm font-medium ${
+                tradeMsg.startsWith('✅') ? 'bg-brand-50 border border-brand-200 text-brand-700' : 'bg-fin-red-light border border-red-200 text-fin-red'
+              }`}>
+                {tradeMsg}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleTrade}
+                disabled={!qty || Number(qty) <= 0 || tradeLoading || tradeMsg.startsWith('✅')}
+                className={`flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50 ${
+                  modal.mode === 'buy' ? 'bg-brand-gradient' : 'bg-fin-red'
+                }`}
+              >
+                {tradeLoading ? '처리 중...' : tradeMsg.startsWith('✅') ? '완료' : modal.mode === 'buy' ? '매수 확정' : '매도 확정'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

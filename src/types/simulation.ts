@@ -73,6 +73,7 @@ export interface HoldingResponse {
 export interface TradeHistoryResponse {
   tradeHistoryId: string
   stockCode: string
+  stockName: string
   tradeType: TradeType
   status: TradeStatus
   quantity: number

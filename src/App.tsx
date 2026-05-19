@@ -10,6 +10,7 @@ import SimulationPage from './pages/SimulationPage'
 import StockListPage from './pages/StockListPage'
 import RankingPage from './pages/RankingPage'
 import AchievementsPage from './pages/AchievementsPage'
+import TradeHistoryPage from './pages/TradeHistoryPage'
 
 function Protected({ children }: { children: React.ReactNode }) {
   return <ProtectedRoute>{children}</ProtectedRoute>
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/quiz/result/:sessionId"  element={<Protected><QuizResultPage /></Protected>} />
           <Route path="/simulation"              element={<Protected><SimulationPage /></Protected>} />
           <Route path="/simulation/stocks"       element={<Protected><StockListPage /></Protected>} />
+          <Route path="/simulation/trades"       element={<Protected><TradeHistoryPage /></Protected>} />
           <Route path="/rankings"                element={<Protected><RankingPage /></Protected>} />
           <Route path="/achievements"            element={<Protected><AchievementsPage /></Protected>} />
 

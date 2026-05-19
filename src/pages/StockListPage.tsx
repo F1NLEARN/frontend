@@ -27,6 +27,8 @@ export default function StockListPage() {
   const [qty, setQty] = useState('')
   const [tradeLoading, setTradeLoading] = useState(false)
   const [tradeMsg, setTradeMsg] = useState('')
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [favLoading, setFavLoading] = useState<Set<string>>(new Set())
 
   const fetchStocks = async (reset = false) => {
     setLoading(true)
@@ -55,6 +57,9 @@ export default function StockListPage() {
 
   useEffect(() => {
     fetchStocks(true)
+    simulationApi.getFavorites().then(res => {
+      setFavorites(new Set(res.data.data.map(f => f.symbol)))
+    }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetType])
 
@@ -90,6 +95,7 @@ export default function StockListPage() {
         await simulationApi.sellStock({ stockCode: modal.stock.stockCode, quantity: Number(qty) })
         setTradeMsg(`✅ ${modal.stock.name} ${qty}주 매도 완료!`)
       }
+      setTimeout(() => setModal(null), 1500)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       setTradeMsg(`❌ ${msg ?? '거래에 실패했습니다.'}`)
@@ -101,6 +107,24 @@ export default function StockListPage() {
   const totalAmount = modal && qty
     ? (modal.stock.currentPrice ?? 0) * Number(qty)
     : 0
+
+  const toggleFavorite = async (stock: StockItemResponse) => {
+    if (favLoading.has(stock.stockCode)) return
+    setFavLoading(prev => new Set(prev).add(stock.stockCode))
+    try {
+      if (favorites.has(stock.stockCode)) {
+        await simulationApi.removeFavorite(stock.stockCode)
+        setFavorites(prev => { const s = new Set(prev); s.delete(stock.stockCode); return s })
+      } else {
+        await simulationApi.addFavorite(stock.assetType, stock.stockCode)
+        setFavorites(prev => new Set(prev).add(stock.stockCode))
+      }
+    } catch {
+      // ignore
+    } finally {
+      setFavLoading(prev => { const s = new Set(prev); s.delete(stock.stockCode); return s })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-brand-50">
@@ -177,8 +201,18 @@ export default function StockListPage() {
                         <p className="text-xs text-slate-400">{s.stockCode}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <p className="text-sm font-bold text-slate-800">₩{fmt(s.currentPrice)}</p>
+                      <button
+                        onClick={() => toggleFavorite(s)}
+                        disabled={favLoading.has(s.stockCode)}
+                        className={`text-lg leading-none transition disabled:opacity-50 ${
+                          favorites.has(s.stockCode) ? 'text-yellow-400' : 'text-slate-300 hover:text-yellow-300'
+                        }`}
+                        title={favorites.has(s.stockCode) ? '관심 해제' : '관심 등록'}
+                      >
+                        ★
+                      </button>
                       {s.tradable ? (
                         <div className="flex gap-1.5">
                           <button
@@ -270,12 +304,12 @@ export default function StockListPage() {
               </button>
               <button
                 onClick={handleTrade}
-                disabled={!qty || Number(qty) <= 0 || tradeLoading}
+                disabled={!qty || Number(qty) <= 0 || tradeLoading || tradeMsg.startsWith('✅')}
                 className={`flex-1 rounded-xl py-3 text-sm font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50 ${
                   modal.mode === 'buy' ? 'bg-brand-gradient' : 'bg-fin-red'
                 }`}
               >
-                {tradeLoading ? '처리 중...' : modal.mode === 'buy' ? '매수 확정' : '매도 확정'}
+                {tradeLoading ? '처리 중...' : tradeMsg.startsWith('✅') ? '완료' : modal.mode === 'buy' ? '매수 확정' : '매도 확정'}
               </button>
             </div>
           </div>

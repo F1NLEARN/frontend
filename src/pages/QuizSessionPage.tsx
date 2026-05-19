@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { quizApi } from '../api/quiz'
@@ -309,13 +310,28 @@ export default function QuizSessionPage() {
                   className={`flex ${msg.role === 'USER' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
                       msg.role === 'USER'
                         ? 'bg-brand-gradient text-white'
                         : 'bg-brand-50 border border-brand-100 text-slate-700'
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === 'USER' ? (
+                      msg.content
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                          strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                          ul: ({ children }) => <ul className="ml-4 list-disc space-y-0.5">{children}</ul>,
+                          ol: ({ children }) => <ol className="ml-4 list-decimal space-y-0.5">{children}</ol>,
+                          li: ({ children }) => <li>{children}</li>,
+                          code: ({ children }) => <code className="rounded bg-brand-100 px-1 text-xs font-mono">{children}</code>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </div>
               ))}

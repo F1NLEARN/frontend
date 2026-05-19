@@ -20,10 +20,21 @@ export default function DashboardPage() {
 
   const startLearning = async (category: MainTopic) => {
     setError('')
+    // 진행 중인 학습 세션이 있으면 이어서 풀기
+    const activeId = sessionStorage.getItem(`quiz_active_learning_${category}`)
+    if (activeId && sessionStorage.getItem(`quiz_session_${activeId}`)) {
+      const session = JSON.parse(sessionStorage.getItem(`quiz_session_${activeId}`)!)
+      navigate(`/quiz/session/${activeId}`, { state: { session } })
+      return
+    }
     setLoading(true)
     try {
       const { data } = await quizApi.createLearningSession(category)
-      navigate(`/quiz/session/${data.data.sessionId}`, { state: { session: data.data } })
+      const { sessionId } = data.data
+      sessionStorage.setItem(`quiz_session_${sessionId}`, JSON.stringify(data.data))
+      sessionStorage.setItem(`quiz_orderNo_${sessionId}`, '1')
+      sessionStorage.setItem(`quiz_active_learning_${category}`, sessionId)
+      navigate(`/quiz/session/${sessionId}`, { state: { session: data.data } })
     } catch {
       setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
@@ -33,10 +44,21 @@ export default function DashboardPage() {
 
   const startPoint = async () => {
     setError('')
+    // 진행 중인 포인트 세션이 있으면 이어서 풀기
+    const activeId = sessionStorage.getItem('quiz_active_point')
+    if (activeId && sessionStorage.getItem(`quiz_session_${activeId}`)) {
+      const session = JSON.parse(sessionStorage.getItem(`quiz_session_${activeId}`)!)
+      navigate(`/quiz/session/${activeId}`, { state: { session } })
+      return
+    }
     setLoading(true)
     try {
       const { data } = await quizApi.createPointSession()
-      navigate(`/quiz/session/${data.data.sessionId}`, { state: { session: data.data } })
+      const { sessionId } = data.data
+      sessionStorage.setItem(`quiz_session_${sessionId}`, JSON.stringify(data.data))
+      sessionStorage.setItem(`quiz_orderNo_${sessionId}`, '1')
+      sessionStorage.setItem('quiz_active_point', sessionId)
+      navigate(`/quiz/session/${sessionId}`, { state: { session: data.data } })
     } catch {
       setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
     } finally {

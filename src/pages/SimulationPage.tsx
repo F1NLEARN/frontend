@@ -396,8 +396,8 @@ export default function SimulationPage() {
             <div className="space-y-4">
               {/* 진단 */}
               <div className={`rounded-xl border p-4 ${
-                analysis.diagnosis.riskLevel === 'HIGH' ? 'border-red-200 bg-fin-red-light' :
-                analysis.diagnosis.riskLevel === 'MEDIUM' ? 'border-yellow-200 bg-yellow-50' :
+                analysis.diagnosis.riskLevel === 'AGGRESSIVE' ? 'border-red-200 bg-fin-red-light' :
+                analysis.diagnosis.riskLevel === 'NORMAL' ? 'border-yellow-200 bg-yellow-50' :
                 'border-brand-200 bg-brand-50'
               }`}>
                 <p className="text-sm font-bold text-slate-800 mb-1">📊 진단 요약</p>
@@ -408,27 +408,34 @@ export default function SimulationPage() {
               </div>
 
               {/* 자산 배분 */}
-              <div>
-                <p className="mb-2 text-xs font-bold text-slate-600">자산 배분</p>
-                <div className="space-y-1.5">
-                  {[
-                    { label: '주식', value: analysis.allocation.stockWeight },
-                    { label: 'ETF',  value: analysis.allocation.etfWeight  },
-                    { label: '현금', value: analysis.allocation.cashWeight  },
-                  ].map(({ label, value }) => (
-                    <div key={label} className="flex items-center gap-2">
-                      <span className="w-8 text-xs text-slate-500">{label}</span>
-                      <div className="flex-1 overflow-hidden rounded-full bg-brand-100 h-2">
-                        <div
-                          className="h-full rounded-full bg-brand-gradient"
-                          style={{ width: `${value}%` }}
-                        />
-                      </div>
-                      <span className="w-10 text-right text-xs font-bold text-slate-700">{Number(value).toFixed(1)}%</span>
+              {(() => {
+                const { totalValuationAmount, totalAssetAmount } = analysis.portfolioSummary
+                const valuationRatio = totalAssetAmount > 0 ? totalValuationAmount / totalAssetAmount : 0
+                const allocationItems = [
+                  { label: '주식', value: Number(analysis.allocation.stockWeight) * valuationRatio },
+                  { label: 'ETF',  value: Number(analysis.allocation.etfWeight)   * valuationRatio },
+                  { label: '현금', value: Number(analysis.allocation.cashWeight) },
+                ]
+                return (
+                  <div>
+                    <p className="mb-2 text-xs font-bold text-slate-600">자산 배분</p>
+                    <div className="space-y-1.5">
+                      {allocationItems.map(({ label, value }) => (
+                        <div key={label} className="flex items-center gap-2">
+                          <span className="w-8 text-xs text-slate-500">{label}</span>
+                          <div className="flex-1 overflow-hidden rounded-full bg-brand-100 h-2">
+                            <div
+                              className="h-full rounded-full bg-brand-gradient"
+                              style={{ width: `${value}%` }}
+                            />
+                          </div>
+                          <span className="w-10 text-right text-xs font-bold text-slate-700">{value.toFixed(1)}%</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                )
+              })()}
 
               {/* 추천 */}
               {analysis.recommendations.length > 0 && (

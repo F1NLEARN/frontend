@@ -5,8 +5,8 @@ export type TradeStatus = 'COMPLETED' | 'FAILED' | 'CANCELED'
 export type AnalysisType = 'PORTFOLIO' | 'WEEKLY_REPORT' | 'LEARNING_RECOMMENDATION'
 export type AnalysisStatus = 'READY' | 'COMPLETED' | 'FAILED'
 export type ConcentrationLevel = 'LOW' | 'MEDIUM' | 'HIGH'
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
-export type RecommendationType = 'STUDY' | 'DIVERSIFY' | 'REDUCE_RISK' | 'BUY' | 'SELL'
+export type RiskLevel = 'STABLE' | 'NORMAL' | 'AGGRESSIVE'
+export type RecommendationType = 'QUIZ' | 'PORTFOLIO'
 
 // ─── Account ────────────────────────────────────────────────────────────────
 
@@ -144,6 +144,8 @@ export interface PortfolioAnalysisResponse {
     totalAssetAmount: number
     totalProfitLoss: number
     totalReturnRate: number
+    stockReturnRate: number
+    etfReturnRate: number
   }
   allocation: {
     stockWeight: number

@@ -20,10 +20,21 @@ export default function DashboardPage() {
 
   const startLearning = async (category: MainTopic) => {
     setError('')
+    // 진행 중인 학습 세션이 있으면 이어서 풀기
+    const activeId = sessionStorage.getItem(`quiz_active_learning_${category}`)
+    if (activeId && sessionStorage.getItem(`quiz_session_${activeId}`)) {
+      const session = JSON.parse(sessionStorage.getItem(`quiz_session_${activeId}`)!)
+      navigate(`/quiz/session/${activeId}`, { state: { session } })
+      return
+    }
     setLoading(true)
     try {
       const { data } = await quizApi.createLearningSession(category)
-      navigate(`/quiz/session/${data.data.sessionId}`, { state: { session: data.data } })
+      const { sessionId } = data.data
+      sessionStorage.setItem(`quiz_session_${sessionId}`, JSON.stringify(data.data))
+      sessionStorage.setItem(`quiz_orderNo_${sessionId}`, '1')
+      sessionStorage.setItem(`quiz_active_learning_${category}`, sessionId)
+      navigate(`/quiz/session/${sessionId}`, { state: { session: data.data } })
     } catch {
       setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
@@ -33,12 +44,28 @@ export default function DashboardPage() {
 
   const startPoint = async () => {
     setError('')
+    // 진행 중인 포인트 세션이 있으면 이어서 풀기
+    const activeId = sessionStorage.getItem('quiz_active_point')
+    if (activeId && sessionStorage.getItem(`quiz_session_${activeId}`)) {
+      const session = JSON.parse(sessionStorage.getItem(`quiz_session_${activeId}`)!)
+      navigate(`/quiz/session/${activeId}`, { state: { session } })
+      return
+    }
     setLoading(true)
     try {
       const { data } = await quizApi.createPointSession()
-      navigate(`/quiz/session/${data.data.sessionId}`, { state: { session: data.data } })
-    } catch {
-      setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      const { sessionId } = data.data
+      sessionStorage.setItem(`quiz_session_${sessionId}`, JSON.stringify(data.data))
+      sessionStorage.setItem(`quiz_orderNo_${sessionId}`, '1')
+      sessionStorage.setItem('quiz_active_point', sessionId)
+      navigate(`/quiz/session/${sessionId}`, { state: { session: data.data } })
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 409 || status === 400) {
+        setError('이번 달 포인트 퀴즈는 이미 응시했습니다. 다음 달에 다시 도전해보세요! 🗓️')
+      } else {
+        setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      }
     } finally {
       setLoading(false)
     }
@@ -96,6 +123,7 @@ export default function DashboardPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   모든 카테고리 랜덤 문제 · 70점↑ 통과 시 시드머니 지급
                 </p>
+                <p className="mt-0.5 text-xs text-slate-400">🗓️ 월 1회 응시 가능</p>
                 <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">
                   시작하기 →
                 </span>

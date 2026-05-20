@@ -10,15 +10,23 @@ import type {
   ChatHistoryMessage,
 } from '../types'
 
-type Phase = 'quiz' | 'answered' | 'chat'
+type Phase = 'quiz' | 'answered'
 
 export default function QuizSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const session = location.state?.session as CreateSessionResponse | undefined
 
-  const [orderNo, setOrderNo] = useState(1)
+  // location.state 없으면 sessionStorage에서 복원
+  const session = (location.state?.session ??
+    (sessionId ? JSON.parse(sessionStorage.getItem(`quiz_session_${sessionId}`) ?? 'null') : null)
+  ) as CreateSessionResponse | undefined
+
+  const savedOrderNo = sessionId
+    ? parseInt(sessionStorage.getItem(`quiz_orderNo_${sessionId}`) ?? '1', 10)
+    : 1
+
+  const [orderNo, setOrderNo] = useState(savedOrderNo)
   const [quiz, setQuiz] = useState<QuizResponse | null>(null)
   const [quizLoading, setQuizLoading] = useState(true)
   const [selected, setSelected] = useState<number | null>(null)
@@ -37,6 +45,7 @@ export default function QuizSessionPage() {
 
   useEffect(() => {
     if (!sessionId) return
+    sessionStorage.setItem(`quiz_orderNo_${sessionId}`, String(orderNo))
     setQuizLoading(true)
     setSelected(null)
     setResult(null)
@@ -102,6 +111,13 @@ export default function QuizSessionPage() {
           await quizApi.selectConceptIncludes(sessionId, Array.from(conceptSelected))
         }
         const { data } = await quizApi.closeSession(sessionId)
+        // 세션 종료 시 sessionStorage 정리
+        sessionStorage.removeItem(`quiz_session_${sessionId}`)
+        sessionStorage.removeItem(`quiz_orderNo_${sessionId}`)
+        sessionStorage.removeItem('quiz_active_point')
+        if (session?.category) {
+          sessionStorage.removeItem(`quiz_active_learning_${session.category}`)
+        }
         navigate(`/quiz/result/${sessionId}`, { state: { result: data.data } })
       } catch {
         navigate('/dashboard')
@@ -254,124 +270,114 @@ export default function QuizSessionPage() {
                     {submitting ? '채점 중...' : '제출하기'}
                   </button>
                 )}
-                {(phase === 'answered' || phase === 'chat') && (
-                  <>
-                    {phase === 'answered' && (
-                      <button
-                        onClick={() => setPhase('chat')}
-                        className="rounded-xl border-2 border-brand-300 bg-brand-50 px-4 py-2.5 text-sm font-bold text-brand-600 transition hover:bg-brand-100"
-                      >
-                        💬 AI 튜터
-                      </button>
-                    )}
-                    <button
-                      onClick={handleNext}
-                      className="rounded-xl bg-brand-gradient px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
-                    >
-                      {orderNo < totalCount ? '다음 문제 →' : '결과 보기 →'}
-                    </button>
-                  </>
+                {phase === 'answered' && (
+                  <button
+                    onClick={handleNext}
+                    className="rounded-xl bg-brand-gradient px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
+                  >
+                    {orderNo < totalCount ? '다음 문제 →' : '결과 보기 →'}
+                  </button>
                 )}
               </div>
             </div>
           ) : null}
         </div>
 
-        {/* ── 챗봇 패널 ───────────────────────────── */}
-        {(phase === 'answered' || phase === 'chat') && (
-          <div className="flex w-full flex-col rounded-2xl border border-brand-100 bg-white shadow-sm lg:w-80">
-            {/* 헤더 */}
-            <div className="flex items-center gap-3 border-b border-brand-100 px-4 py-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-gradient text-sm shadow-sm">
-                🤖
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-800">AI 튜터</p>
-                <p className="text-xs text-slate-400">
-                  {isLearning ? '자유롭게 질문하세요' : '힌트·개념만 제공'}
+        {/* ── 챗봇 패널 (항상 표시) ───────────────── */}
+        <div className="flex w-full flex-col rounded-2xl border border-brand-100 bg-white shadow-sm lg:w-80">
+          {/* 헤더 */}
+          <div className="flex items-center gap-3 border-b border-brand-100 px-4 py-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-gradient text-sm shadow-sm">
+              🤖
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">AI 튜터</p>
+              <p className="text-xs text-slate-400">
+                {isLearning ? '자유롭게 질문하세요' : '힌트·개념만 제공'}
+              </p>
+            </div>
+          </div>
+
+          {/* 메시지 */}
+          <div
+            className="flex-1 overflow-y-auto p-4 space-y-3"
+            style={{ maxHeight: '380px', minHeight: '180px' }}
+          >
+            {chatMessages.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <span className="text-3xl">💬</span>
+                <p className="mt-2 text-xs text-slate-400">
+                  문제를 풀면서<br />궁금한 점을 질문해보세요!
                 </p>
               </div>
-            </div>
-
-            {/* 메시지 */}
-            <div
-              className="flex-1 overflow-y-auto p-4 space-y-3"
-              style={{ maxHeight: '380px', minHeight: '180px' }}
-            >
-              {chatMessages.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <span className="text-3xl">💬</span>
-                  <p className="mt-2 text-xs text-slate-400">궁금한 점을 질문해보세요!</p>
-                </div>
-              )}
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === 'USER' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      msg.role === 'USER'
-                        ? 'bg-brand-gradient text-white'
-                        : 'bg-brand-50 border border-brand-100 text-slate-700'
-                    }`}
-                  >
-                    {msg.role === 'USER' ? (
-                      msg.content
-                    ) : (
-                      <ReactMarkdown
-                        components={{
-                          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                          strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-                          ul: ({ children }) => <ul className="ml-4 list-disc space-y-0.5">{children}</ul>,
-                          ol: ({ children }) => <ol className="ml-4 list-decimal space-y-0.5">{children}</ol>,
-                          li: ({ children }) => <li>{children}</li>,
-                          code: ({ children }) => <code className="rounded bg-brand-100 px-1 text-xs font-mono">{children}</code>,
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {chatLoading && (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl bg-brand-50 border border-brand-100 px-4 py-2.5 text-sm text-brand-500">
-                    <span className="inline-flex gap-1">
-                      <span className="animate-bounce">•</span>
-                      <span className="animate-bounce" style={{ animationDelay: '0.1s' }}>•</span>
-                      <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>•</span>
-                    </span>
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* 입력창 */}
-            <form
-              onSubmit={handleSendChat}
-              className="flex gap-2 border-t border-brand-100 p-3"
-            >
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="질문을 입력하세요..."
-                disabled={chatLoading}
-                className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-              />
-              <button
-                type="submit"
-                disabled={!chatInput.trim() || chatLoading}
-                className="rounded-xl bg-brand-gradient px-3 py-2 text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+            )}
+            {chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${msg.role === 'USER' ? 'justify-end' : 'justify-start'}`}
               >
-                ↑
-              </button>
-            </form>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    msg.role === 'USER'
+                      ? 'bg-brand-gradient text-white'
+                      : 'bg-brand-50 border border-brand-100 text-slate-700'
+                  }`}
+                >
+                  {msg.role === 'USER' ? (
+                    msg.content
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                        strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                        ul: ({ children }) => <ul className="ml-4 list-disc space-y-0.5">{children}</ul>,
+                        ol: ({ children }) => <ol className="ml-4 list-decimal space-y-0.5">{children}</ol>,
+                        li: ({ children }) => <li>{children}</li>,
+                        code: ({ children }) => <code className="rounded bg-brand-100 px-1 text-xs font-mono">{children}</code>,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  )}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="rounded-2xl bg-brand-50 border border-brand-100 px-4 py-2.5 text-sm text-brand-500">
+                  <span className="inline-flex gap-1">
+                    <span className="animate-bounce">•</span>
+                    <span className="animate-bounce" style={{ animationDelay: '0.1s' }}>•</span>
+                    <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>•</span>
+                  </span>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
-        )}
+
+          {/* 입력창 */}
+          <form
+            onSubmit={handleSendChat}
+            className="flex gap-2 border-t border-brand-100 p-3"
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="질문을 입력하세요..."
+              disabled={chatLoading}
+              className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            />
+            <button
+              type="submit"
+              disabled={!chatInput.trim() || chatLoading}
+              className="rounded-xl bg-brand-gradient px-3 py-2 text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+            >
+              ↑
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )

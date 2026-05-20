@@ -59,8 +59,13 @@ export default function DashboardPage() {
       sessionStorage.setItem(`quiz_orderNo_${sessionId}`, '1')
       sessionStorage.setItem('quiz_active_point', sessionId)
       navigate(`/quiz/session/${sessionId}`, { state: { session: data.data } })
-    } catch {
-      setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 409 || status === 400) {
+        setError('이번 달 포인트 퀴즈는 이미 응시했습니다. 다음 달에 다시 도전해보세요! 🗓️')
+      } else {
+        setError('세션 생성에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      }
     } finally {
       setLoading(false)
     }
@@ -118,6 +123,7 @@ export default function DashboardPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   모든 카테고리 랜덤 문제 · 70점↑ 통과 시 시드머니 지급
                 </p>
+                <p className="mt-0.5 text-xs text-slate-400">🗓️ 월 1회 응시 가능</p>
                 <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">
                   시작하기 →
                 </span>

@@ -69,9 +69,8 @@ export default function QuizSessionPage() {
       const { data } = await quizApi.submitAnswer(sessionId, orderNo, selected)
       setResult(data.data)
       setPhase('answered')
-      if (isLearning && data.data.correct) {
-        setConceptSelected((prev) => new Set(prev).add(orderNo))
-      }
+      // 포인트 퀴즈는 백엔드가 오답 시 자동 처리 → 프론트 개입 없음
+      // 학습 퀴즈는 사용자가 직접 토글로 선택 → 기본값 미선택
       const chatRes = await quizApi.getChatHistory(sessionId, orderNo)
       setChatMessages(chatRes.data.data.messages)
     } catch {
@@ -79,6 +78,18 @@ export default function QuizSessionPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const toggleConceptInclude = () => {
+    setConceptSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(orderNo)) {
+        next.delete(orderNo)
+      } else {
+        next.add(orderNo)
+      }
+      return next
+    })
   }
 
   const handleSendChat = async (e: FormEvent) => {
@@ -107,6 +118,8 @@ export default function QuizSessionPage() {
     } else {
       if (!sessionId) return
       try {
+        // 학습 퀴즈만: 사용자가 선택한 문제 개념정리 포함 요청
+        // 포인트 퀴즈는 백엔드에서 오답 자동 처리
         if (isLearning && conceptSelected.size > 0) {
           await quizApi.selectConceptIncludes(sessionId, Array.from(conceptSelected))
         }
@@ -245,18 +258,51 @@ export default function QuizSessionPage() {
 
               {/* 결과 배너 */}
               {phase === 'answered' && result && (
-                <div
-                  className={`mt-5 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium ${
-                    result.correct
-                      ? 'bg-brand-50 border border-brand-200 text-brand-700'
-                      : 'bg-fin-red-light border border-red-200 text-fin-red'
-                  }`}
-                >
-                  <span>{result.correct ? '🎉 정답입니다!' : `정답은 ${result.correctNo}번이에요`}</span>
-                  <span className="ml-auto text-xs font-normal text-slate-400">
-                    AI 튜터에게 질문해보세요 →
-                  </span>
-                </div>
+                <>
+                  <div
+                    className={`mt-5 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium ${
+                      result.correct
+                        ? 'bg-brand-50 border border-brand-200 text-brand-700'
+                        : 'bg-fin-red-light border border-red-200 text-fin-red'
+                    }`}
+                  >
+                    <span>{result.correct ? '🎉 정답입니다!' : `정답은 ${result.correctNo}번이에요`}</span>
+                    <span className="ml-auto text-xs font-normal text-slate-400">
+                      AI 튜터에게 질문해보세요 →
+                    </span>
+                  </div>
+
+                  {/* 개념정리 포함 토글 (학습 퀴즈만) */}
+                  {isLearning && (
+                    <button
+                      onClick={toggleConceptInclude}
+                      className={`mt-3 flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-sm font-medium transition ${
+                        conceptSelected.has(orderNo)
+                          ? 'border-brand-400 bg-brand-50 text-brand-700'
+                          : 'border-slate-200 bg-white text-slate-500 hover:border-brand-200 hover:bg-brand-50/50'
+                      }`}
+                    >
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition ${
+                        conceptSelected.has(orderNo)
+                          ? 'border-brand-500 bg-brand-500 text-white'
+                          : 'border-slate-300 bg-white'
+                      }`}>
+                        {conceptSelected.has(orderNo) && (
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </span>
+                      <div className="text-left">
+                        <span>📖 이 문제 개념정리에 포함하기</span>
+                        <p className="text-xs text-slate-400 font-normal">선택한 문제만 AI가 개념을 정리해드려요</p>
+                      </div>
+                      <span className={`ml-auto text-xs font-semibold ${conceptSelected.has(orderNo) ? 'text-brand-600' : 'text-slate-300'}`}>
+                        {conceptSelected.has(orderNo) ? '✓ 포함' : '미포함'}
+                      </span>
+                    </button>
+                  )}
+                </>
               )}
 
               {/* 버튼 */}
